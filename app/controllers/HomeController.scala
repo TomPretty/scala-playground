@@ -4,6 +4,8 @@ import javax.inject._
 import play.api._
 import play.api.mvc._
 
+import services.{AwsCloudWatch}
+
 /**
  * This controller creates an `Action` to handle HTTP requests to the
  * application's home page.
@@ -19,6 +21,8 @@ class HomeController @Inject()(val controllerComponents: ControllerComponents) e
    * a path of `/`.
    */
   def index() = Action { implicit request: Request[AnyContent] =>
+    AwsCloudWatch.metricGet(AwsCloudWatch.MetricRequest("", "", Map()))
+
     Ok(views.html.index())
   }
 }
