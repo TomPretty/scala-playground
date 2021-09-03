@@ -24,7 +24,7 @@ import software.amazon.awssdk.services.cloudwatch.model.MetricStat
 import software.amazon.awssdk.services.cloudwatch.model.MetricDataQuery
 
 object Aws {
-  val ProfileName = "membership"
+  val ProfileName = "mobile"
 
   lazy val CredentialsProvider: AwsCredentialsProviderChain =
     AwsCredentialsProviderChain.builder
@@ -45,25 +45,32 @@ object AwsCloudWatch {
       namespace: String,
       name: String,
       dimensions: Map[String, String],
-      value: Double = 1.0
+      value: Double = 1.0,
+      stat: String,
+      startTime: Instant,
+      endTime: Instant,
+      period: Int
   )
 
   def metricGet(request: MetricRequest): Try[Unit] = {
+    buildMetricRequest(request, None)
+  }
 
-    val start = Instant.parse("2021-07-28T10:12:35Z");
-    val endDate = Instant.now();
-
-    val met = Metric
+  private def buildMetricRequest(
+      request: MetricRequest,
+      nextToken: Option[String]
+  ): Try[Unit] = {
+    val metric = Metric
       .builder()
-      .metricName("2XX-response-code")
-      .namespace("members-data-api")
+      .metricName(request.name)
+      .namespace(request.namespace)
       .build();
 
     val metStat = MetricStat
       .builder()
-      .stat("Minimum")
-      .period(60)
-      .metric(met)
+      .stat(request.stat)
+      .period(request.period)
+      .metric(metric)
       .build();
 
     val dataQUery = MetricDataQuery
@@ -73,32 +80,45 @@ object AwsCloudWatch {
       .returnData(true)
       .build();
 
-		val dq = List(dataQUery)
+    val dq = List(dataQUery)
 
-    val getMetricDataRequest = GetMetricDataRequest.builder
+    val getMetricDataRequestBuilder = GetMetricDataRequest.builder
       .maxDatapoints(100)
-      .startTime(start)
-      .endTime(endDate)
+      .startTime(request.startTime)
+      .endTime(request.endTime)
       .metricDataQueries(dq.asJava)
-      .build()
 
-    Try(client.getMetricData(getMetricDataRequest)).map(response => println(response.metricDataResults()))
-  }
+    nextToken match {
+      case Some(x) => getMetricDataRequestBuilder.nextToken(x)
+      case None    => getMetricDataRequestBuilder
+    }
 
-  private def buildMetricDatum(request: MetricRequest) = {
-    val dimensions = request.dimensions
-      .map { case (name, value) =>
-        Dimension.builder.name(name).value(value).build()
+    val getMetricDataRequest = getMetricDataRequestBuilder.build()
+
+    Try(client.getMetricData(getMetricDataRequest)).map(response => {
+      if (response.nextToken() == null || response.nextToken().isEmpty)
+        println(response.metricDataResults())
+      else {
+        println(response.metricDataResults())
+        buildMetricRequest(request, Some(response.nextToken()))
       }
-      .toList
-      .asJava
-    MetricDatum.builder
-      .metricName(request.name)
-      .dimensions(dimensions)
-      .value(request.value)
-      .unit(StandardUnit.COUNT)
-      .build()
+    })
   }
+
+//  private def buildMetricDatum(request: MetricRequest) = {
+//    val dimensions = request.dimensions
+//      .map { case (name, value) =>
+//        Dimension.builder.name(name).value(value).build()
+//      }
+//      .toList
+//      .asJava
+//    MetricDatum.builder
+//      .metricName(request.name)
+//      .dimensions(dimensions)
+//      .value(request.value)
+//      .unit(StandardUnit.COUNT)
+//      .build()
+//  }
 
   def test = println(client.listMetrics())
 }
